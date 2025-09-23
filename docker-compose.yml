@@ -1,0 +1,66 @@
+version: '3.9'
+services:
+  sqlserver:
+    image: mcr.microsoft.com/mssql/server:2022-latest
+    environment:
+      - ACCEPT_EULA=Y
+      - SA_PASSWORD=ch3lSeaFC88*
+    ports:
+      - "1434:1434"
+
+  rabbitmq:
+    image: rabbitmq:3-management
+    ports:
+      - "5672:5672"
+      - "15672:15672"
+
+  redis:
+    image: redis:latest
+    ports:
+      - "6379:6379"
+
+  keycloak:
+    image: quay.io/keycloak/keycloak:latest
+    command: start-dev
+    environment:
+      - KEYCLOAK_ADMIN=admin
+      - KEYCLOAK_ADMIN_PASSWORD=admin
+    ports:
+      - "8080:8080"
+
+  aspire-dashboard:
+    image: mcr.microsoft.com/dotnet/aspire-dashboard:8.0
+    ports:
+      - "18888:18888"   # UI
+      - "18889:18889"   # OTLP ingest
+
+  auditservice:
+    build:
+      context: .
+      dockerfile: ./src/AuditService/Dockerfile
+    environment:
+      - ASPNETCORE_URLS=http://+:5000
+      - ASPNETCORE_ENVIRONMENT=Development
+    ports:
+      - "5000:5000"
+    depends_on:
+      - sqlserver
+      - rabbitmq
+      - redis
+      - keycloak
+      - aspire-dashboard
+
+  auditworker:
+    build:
+      context: .
+      dockerfile: ./src/AuditWorker/Dockerfile
+    depends_on:
+      - rabbitmq
+      - redis
+
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:80"
+    depends_on:
+      - auditservice

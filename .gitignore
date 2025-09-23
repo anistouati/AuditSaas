@@ -1,0 +1,10 @@
+bin/
+obj/
+.vs/
+*.user
+*.suo
+*.DS_Store
+*.swp
+node_modules/
+dist/
+test_results.trx
