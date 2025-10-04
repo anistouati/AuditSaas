@@ -9,6 +9,7 @@ using Shared.Messaging;
 using Shared.Observability;
 using System.Security.Claims;
 using System.Text.Json;
+using System.Collections.Generic;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -25,6 +26,41 @@ builder.Services.AddSingleton<IRedisClient, RedisClient>();
 
 // Business
 builder.Services.AddScoped<AuditScheduler>();
+
+// Swagger / OpenAPI
+builder.Services.AddEndpointsApiExplorer();
+builder.Services.AddSwaggerGen(opt =>
+{
+    opt.SwaggerDoc("v1", new Microsoft.OpenApi.Models.OpenApiInfo
+    {
+        Title = "Audit Service API",
+        Version = "v1",
+        Description = "API for scheduling and viewing audits"
+    });
+    // JWT bearer security definition for Keycloak
+    opt.AddSecurityDefinition("Bearer", new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+    {
+        Name = "Authorization",
+        Type = Microsoft.OpenApi.Models.SecuritySchemeType.Http,
+        Scheme = "bearer",
+        BearerFormat = "JWT",
+        In = Microsoft.OpenApi.Models.ParameterLocation.Header,
+        Description = "Enter 'Bearer {token}' obtained from Keycloak"
+    });
+    opt.AddSecurityRequirement(new Microsoft.OpenApi.Models.OpenApiSecurityRequirement
+    {
+        {
+            new Microsoft.OpenApi.Models.OpenApiSecurityScheme
+            {
+                Reference = new Microsoft.OpenApi.Models.OpenApiReference
+                {
+                    Type = Microsoft.OpenApi.Models.ReferenceType.SecurityScheme,
+                    Id = "Bearer"
+                }
+            }, new List<string>()
+        }
+    });
+});
 
 // CORS
 builder.Services.AddCors(o =>
@@ -89,6 +125,17 @@ builder.Services.AddAuthorization(options =>
 
 var app = builder.Build();
 
+// Enable Swagger only in Development (or always if you prefer)
+if (app.Environment.IsDevelopment())
+{
+    app.UseSwagger();
+    app.UseSwaggerUI(c =>
+    {
+        c.SwaggerEndpoint("/swagger/v1/swagger.json", "Audit Service API v1");
+        c.DisplayRequestDuration();
+    });
+}
+
 // Ensure schema exists
 using (var scope = app.Services.CreateScope())
 {
@@ -109,24 +156,44 @@ audits.MapPost("/schedule", async (Audit audit, AuditScheduler service) =>
 {
     var result = await service.ScheduleAuditAsync(audit);
     return Results.Ok(new { result.Id, message = "Audit scheduled, event published, cached" });
-});
+})
+    .WithName("ScheduleAudit")
+    .WithSummary("Schedule a new audit")
+    .WithDescription("Creates an audit, publishes an event, and caches the entity.")
+    .Produces<object>(StatusCodes.Status200OK);
 
 audits.MapGet("/", async (AuditScheduler service) =>
 {
     var list = await service.GetAuditsAsync();
     return Results.Ok(list);
-});
+})
+    .WithName("ListAudits")
+    .WithSummary("List audits")
+    .WithDescription("Returns all scheduled audits.")
+    .Produces<IEnumerable<Audit>>(StatusCodes.Status200OK);
 
 app.MapGet("/api/audit/{id}", async (Guid id, IRedisClient cache) =>
 {
     var cached = await cache.GetAsync<object>($"audit:{id}");
     return cached is not null ? Results.Ok(cached) : Results.NotFound();
-}).RequireAuthorization("Auditor");
+})
+    .WithName("GetAuditById")
+    .WithSummary("Get audit by Id")
+    .WithDescription("Fetch an audit from cache by identifier.")
+    .Produces<object>(StatusCodes.Status200OK)
+    .Produces(StatusCodes.Status404NotFound)
+    .RequireAuthorization("Auditor");
 
 app.MapGet("/api/audit/{id}/summary", async (Guid id, IRedisClient cache) =>
 {
     var summary = await cache.GetAsync<object>("audit:" + id + ":summary");
     return summary is not null ? Results.Ok(summary) : Results.NotFound();
-}).RequireAuthorization("Auditor");
+})
+    .WithName("GetAuditSummary")
+    .WithSummary("Get audit summary")
+    .WithDescription("Fetch a cached summary for the audit.")
+    .Produces<object>(StatusCodes.Status200OK)
+    .Produces(StatusCodes.Status404NotFound)
+    .RequireAuthorization("Auditor");
 
 app.Run();
