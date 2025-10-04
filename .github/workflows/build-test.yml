@@ -16,6 +16,9 @@ jobs:
         env:
           ACCEPT_EULA: Y
           SA_PASSWORD: Interfac1ng!2024
+          MSSQL_AGENT_ENABLED: 'false'
+          MSSQL_PID: Developer
+          TZ: UTC
         ports:
           - 1433:1433
       rabbitmq:
@@ -86,23 +89,26 @@ jobs:
       - name: Ensure DB Ready (extra guard)
         shell: bash
         run: |
-          for i in {1..30}; do
-            if command -v sqlcmd >/dev/null 2>&1; then
-              if sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -Q "SELECT 1" >/dev/null 2>&1; then
-                echo "SQL ready"
-                exit 0
-              fi
-            else
-              # Fallback: raw TCP probe
-              if (echo > /dev/tcp/localhost/1433) >/dev/null 2>&1; then
-                echo "Port 1433 open (no sqlcmd available)"
-                exit 0
+          echo "Checking SQL Server readiness..."
+          ATTEMPTS=90
+          for i in $(seq 1 $ATTEMPTS); do
+            if (echo > /dev/tcp/localhost/1433) >/dev/null 2>&1; then
+              # If sqlcmd installed, do an actual query (tools18 requires -C for trust). Otherwise accept port open.
+              if command -v sqlcmd >/dev/null 2>&1; then
+                if sqlcmd -C -S localhost -U sa -P "$SA_PASSWORD" -Q "SELECT 1" >/dev/null 2>&1; then
+                  echo "SQL ready (query succeeded on attempt $i)"; exit 0; fi
+              else
+                echo "SQL port open (no sqlcmd yet) attempt $i"; exit 0;
               fi
             fi
-            echo "Waiting for SQL..."
+            if (( i % 10 == 0 )); then
+              echo "Attempt $i/$ATTEMPTS: still waiting... showing last 20 log lines:" >&2
+              docker logs $(docker ps --filter 'ancestor=mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04' --format '{{.ID}}') 2>&1 | tail -n 20 || true
+            fi
             sleep 2
           done
-          echo "SQL never became ready" >&2
+          echo "SQL never became ready after $ATTEMPTS attempts (~$((ATTEMPTS*2))s). Dumping full recent logs:" >&2
+          docker logs $(docker ps --filter 'ancestor=mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04' --format '{{.ID}}') 2>&1 | tail -n 200 || true
           exit 1
 
       - name: Frontend dependencies cache
