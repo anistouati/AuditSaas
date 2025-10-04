@@ -32,6 +32,7 @@ jobs:
       ASPNETCORE_ENVIRONMENT: Development
       SA_PASSWORD: Interfac1ng!2024
       CONNECTIONSTRINGS__DEFAULTCONNECTION: "Server=localhost,1433;User ID=sa;Password=Interfac1ng!2024;TrustServerCertificate=True;Encrypt=True;"
+      RABBITMQ_HOST: localhost
 
     steps:
       - name: Checkout
@@ -61,6 +62,31 @@ jobs:
 
       - name: Build
         run: dotnet build RegulaFlow.AuditSaaS.sln --no-restore --configuration Release
+
+      - name: Launch API (background)
+        shell: bash
+        run: |
+          dotnet publish src/AuditService/AuditService.csproj -c Release -o apiout
+          (cd apiout && ASPNETCORE_URLS=http://localhost:5000 dotnet AuditService.dll &) 
+          for i in {1..50}; do
+            if curl -sf http://localhost:5000/swagger/v1/swagger.json >/dev/null 2>&1; then
+              echo "API ready (swagger)"; break;
+            fi
+            if curl -sf http://localhost:5000/api/audit >/dev/null 2>&1; then
+              echo "API ready (endpoint)"; break;
+            fi
+            sleep 2
+            if [ "$i" -eq 50 ]; then echo "API failed to become ready" >&2; exit 1; fi
+          done
+
+      - name: Check RabbitMQ (optional)
+        shell: bash
+        run: |
+          for i in {1..30}; do
+            if curl -sf http://localhost:15672 >/dev/null 2>&1; then echo "RabbitMQ management UI reachable"; break; fi
+            sleep 2
+            if [ "$i" -eq 30 ]; then echo "RabbitMQ not reachable (continuing anyway)" >&2; fi
+          done
 
       - name: Run Integration Tests
         run: dotnet test tests/IntegrationTests/IntegrationTests.csproj --no-build --configuration Release --logger 'trx;LogFileName=integration.trx'
