@@ -18,8 +18,9 @@ jobs:
           SA_PASSWORD: interfac1ng!
         ports:
           - 1433:1433
+        # Use the path that actually exists inside the SQL container (/opt/mssql-tools/bin/sqlcmd).
         options: >-
-          --health-cmd "bash -c '/opt/mssql-tools18/bin/sqlcmd -C -No -S localhost -U sa -P interfac1ng! -Q \"SELECT 1\" || exit 1'"
+          --health-cmd "bash -c '/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P \"$SA_PASSWORD\" -Q \"SELECT 1\" >/dev/null 2>&1 || exit 1'"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 10
@@ -44,7 +45,10 @@ jobs:
           --health-retries 15
 
     env:
-      DOTNET_VERSION: 8.0.x
+      DOTNET_VERSION: |
+        9.0.x
+        8.0.x
+      SA_PASSWORD: interfac1ng!
       CONNECTIONSTRINGS__DEFAULTCONNECTION: Server=localhost,1433;User ID=sa;Password=interfac1ng!;TrustServerCertificate=True;Encrypt=True;
       ASPNETCORE_ENVIRONMENT: Development
 
@@ -52,10 +56,21 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Setup .NET
+      - name: Setup .NET (8 & 9)
         uses: actions/setup-dotnet@v4
         with:
-            dotnet-version: ${{ env.DOTNET_VERSION }}
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Install sqlcmd (mssql-tools18)
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y curl gnupg
+          curl https://packages.microsoft.com/keys/microsoft.asc | sudo tee /etc/apt/trusted.gpg.d/microsoft.asc
+          curl https://packages.microsoft.com/config/ubuntu/22.04/prod.list | sudo tee /etc/apt/sources.list.d/mssql-release.list
+          sudo apt-get update
+            # ACCEPT_EULA required
+          sudo ACCEPT_EULA=Y apt-get install -y mssql-tools18 unixodbc-dev
+          echo "/opt/mssql-tools18/bin" >> $GITHUB_PATH
 
       - name: Cache NuGet
         uses: actions/cache@v4
@@ -78,7 +93,18 @@ jobs:
         shell: bash
         run: |
           for i in {1..30}; do
-            /opt/mssql-tools18/bin/sqlcmd -C -No -S localhost -U sa -P interfac1ng! -Q "SELECT 1" && echo "SQL ready" && exit 0
+            if command -v sqlcmd >/dev/null 2>&1; then
+              if sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -Q "SELECT 1" >/dev/null 2>&1; then
+                echo "SQL ready"
+                exit 0
+              fi
+            else
+              # Fallback: raw TCP probe
+              if (echo > /dev/tcp/localhost/1433) >/dev/null 2>&1; then
+                echo "Port 1433 open (no sqlcmd available)"
+                exit 0
+              fi
+            fi
             echo "Waiting for SQL..."
             sleep 2
           done
@@ -102,11 +128,13 @@ jobs:
           npm run build
 
       - name: Launch API (background)
+        shell: bash
         run: |
           dotnet publish src/AuditService/AuditService.csproj -c Release -o out
           (cd out && dotnet AuditService.dll &) 
           for i in {1..40}; do
-            if curl -sf http://localhost:5000/swagger/v1/swagger.json >/dev/null 2>&1 || curl -sf http://localhost:5000/api/audit >/dev/null 2>&1; then
+            if curl -sf http://localhost:5000/swagger/v1/swagger.json >/dev/null 2>&1 || \
+               curl -sf http://localhost:5000/api/audit >/dev/null 2>&1; then
               echo "API ready"
               exit 0
             fi
@@ -115,11 +143,9 @@ jobs:
           done
           echo "API failed to become ready" >&2
           exit 1
-        shell: bash
 
       - name: Run Integration Tests
         run: dotnet test tests/IntegrationTests/IntegrationTests.csproj --configuration Release --no-build --logger "trx;LogFileName=integration_tests.trx"
 
       - name: Summary
-        run: |
-          echo "All tests passed"
+        run: echo "All tests passed"
