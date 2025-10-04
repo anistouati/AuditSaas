@@ -1,5 +1,5 @@
 # RegulaFlow Audit SaaS  
-[![Build and Test](https://github.com/kiranis/regulaflow-audit-saas/actions/workflows/build-test.yml/badge.svg)](https://github.com/your-username/regulaflow-audit-saas/actions/workflows/build-test.yml)
+[![Build and Test](https://github.com/anistouati/AuditSaas/actions/workflows/build-test.yml/badge.svg)](https://github.com/anistouati/AuditSaas/actions/workflows/build-test.yml)
 
 Audit Scheduling & Tracking — Governance, Risk & Compliance (GRC) SaaS Demo
 
@@ -22,7 +22,7 @@ It is aligned with Interfacing’s GRC sector and demonstrates a modern SaaS arc
 
 | Layer            | Technology |
 |------------------|------------|
-| Backend          | .NET 9 Minimal APIs |
+| Backend          | .NET 8 Minimal APIs |
 | Data             | Entity Framework Core + SQL Server |
 | Auth             | Keycloak (OIDC/JWT), DevAuth stub |
 | Messaging        | RabbitMQ |
