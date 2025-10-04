@@ -1,5 +1,5 @@
 # RegulaFlow Audit SaaS  
-[![Build and Test](https://github.com/kiranis/regulaflow-audit-saas/actions/workflows/build-test.yml/badge.svg)](https://github.com/your-username/regulaflow-audit-saas/actions/workflows/build-test.yml)
+[![Build and Test](https://github.com/anistouati/AuditSaas/actions/workflows/build-test.yml/badge.svg)](https://github.com/anistouati/AuditSaas/actions/workflows/build-test.yml)
 
 Audit Scheduling & Tracking — Governance, Risk & Compliance (GRC) SaaS Demo
 
