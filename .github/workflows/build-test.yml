@@ -117,14 +117,23 @@ jobs:
           path: |
             ~/.npm
             frontend/node_modules
-          key: npm-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+          key: npm-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}-${{ hashFiles('frontend/package.json') }}
           restore-keys: |
             npm-${{ runner.os }}-
 
       - name: Build Frontend
         working-directory: frontend
         run: |
-          npm ci
+          if [ ! -f package-lock.json ]; then
+            echo "No package-lock.json found – running npm install to generate one." >&2
+            npm install --package-lock-only
+          fi
+          if [ -f package-lock.json ]; then
+            npm ci
+          else
+            echo "Still no lockfile after attempt; falling back to npm install (non-deterministic)." >&2
+            npm install
+          fi
           npm run build
 
       - name: Launch API (background)
