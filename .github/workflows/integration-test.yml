@@ -8,26 +8,70 @@ jobs:
     runs-on: ubuntu-latest
     services:
       sqlserver:
-        image: mcr.microsoft.com/mssql/server:2022-latest
+        image: mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04
         env:
           ACCEPT_EULA: Y
-          SA_PASSWORD: Your_password123
+          SA_PASSWORD: Interfac1ng!2024
         ports:
           - 1433:1433
+        options: >-
+          --health-cmd "bash -c '/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P \"$SA_PASSWORD\" -Q \"SELECT 1\" >/dev/null 2>&1 || exit 1'" \
+          --health-interval 10s --health-timeout 5s --health-retries 15 --health-start-period 20s
       rabbitmq:
         image: rabbitmq:3-management
         ports:
           - 5672:5672
           - 15672:15672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping" --health-interval 10s --health-timeout 5s --health-retries 10
       redis:
         image: redis:latest
         ports:
           - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping | grep PONG || exit 1" --health-interval 5s --health-timeout 3s --health-retries 20
+
+    env:
+      ASPNETCORE_ENVIRONMENT: Development
+      SA_PASSWORD: Interfac1ng!2024
+      CONNECTIONSTRINGS__DEFAULTCONNECTION: "Server=localhost,1433;User ID=sa;Password=Interfac1ng!2024;TrustServerCertificate=True;Encrypt=True;"
+
     steps:
-      - uses: actions/checkout@v3
-      - uses: actions/setup-dotnet@v3
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET (9 & 8)
+        uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
-      - run: dotnet restore
-      - run: dotnet build --no-restore --configuration Release
-      - run: dotnet test tests/IntegrationTests/IntegrationTests.csproj --no-build --configuration Release
+          dotnet-version: |
+            9.0.x
+            8.0.x
+
+
+      - name: Wait for SQL (health & retry)
+        shell: bash
+        run: |
+          echo "Waiting for SQL Server to become healthy..."
+          for i in {1..60}; do
+            if /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -Q "SELECT 1" >/dev/null 2>&1; then
+              echo "SQL up on attempt $i"; break;
+            fi
+            sleep 2
+            if [ "$i" -eq 60 ]; then echo "SQL did not become ready"; exit 1; fi
+          done
+
+      - name: Restore
+        run: dotnet restore RegulaFlow.AuditSaaS.sln
+
+      - name: Build
+        run: dotnet build RegulaFlow.AuditSaaS.sln --no-restore --configuration Release
+
+      - name: Run Integration Tests
+        run: dotnet test tests/IntegrationTests/IntegrationTests.csproj --no-build --configuration Release --logger 'trx;LogFileName=integration.trx'
+
+      - name: Upload Test Results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: integration-test-results
+          path: '**/integration.trx'

@@ -12,13 +12,12 @@ jobs:
 
     services:
       sqlserver:
-        image: mcr.microsoft.com/mssql/server:2022-latest
+        image: mcr.microsoft.com/mssql/server:2022-CU14-ubuntu-22.04
         env:
           ACCEPT_EULA: Y
-          SA_PASSWORD: interfac1ng!
+          SA_PASSWORD: Interfac1ng!2024
         ports:
           - 1433:1433
-        # Use the path that actually exists inside the SQL container (/opt/mssql-tools/bin/sqlcmd).
         options: >-
           --health-cmd "bash -c '/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P \"$SA_PASSWORD\" -Q \"SELECT 1\" >/dev/null 2>&1 || exit 1'"
           --health-interval 10s
@@ -48,8 +47,8 @@ jobs:
       DOTNET_VERSION: |
         9.0.x
         8.0.x
-      SA_PASSWORD: interfac1ng!
-      CONNECTIONSTRINGS__DEFAULTCONNECTION: Server=localhost,1433;User ID=sa;Password=interfac1ng!;TrustServerCertificate=True;Encrypt=True;
+      SA_PASSWORD: Interfac1ng!2024
+      CONNECTIONSTRINGS__DEFAULTCONNECTION: "Server=localhost,1433;User ID=sa;Password=Interfac1ng!2024;TrustServerCertificate=True;Encrypt=True;"
       ASPNETCORE_ENVIRONMENT: Development
 
     steps:
