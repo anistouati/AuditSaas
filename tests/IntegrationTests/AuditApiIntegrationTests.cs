@@ -12,7 +12,7 @@ public class AuditApiIntegrationTests
     [Test]
     public async Task ScheduleAudit_Should_Return_200()
     {
-        var payload = new { Title = "Integration Audit", ScheduledDate = DateTime.UtcNow.AddDays(3), AssignedTo = "auditor@test.com" };
+        var payload = new { Title = "Integration Audit", ScheduledDate = DateTime.UtcNow.AddDays(3), AssignedTo = "auditor@interfacing.com" };
         var response = await _client.PostAsJsonAsync("/api/audit/schedule", payload);
         await Assert.That(response.IsSuccessStatusCode).IsTrue();
     }

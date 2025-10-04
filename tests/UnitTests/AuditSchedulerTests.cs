@@ -25,7 +25,7 @@ public class AuditSchedulerTests
     public async Task ScheduleAudit_Should_Save_And_Publish_Event()
     {
         var dbContext = CreateInMemoryDb();
-        var mockMq = new Mock<RabbitMqClient>("fakehost");
+        var mockMq = new Mock<IRabbitMqClient>();
         mockMq.Setup(m => m.Publish(It.IsAny<AuditScheduledEvent>()));
         var mockCache = new Mock<IRedisClient>();
 
@@ -43,7 +43,7 @@ public class AuditSchedulerTests
     public async Task GetAudits_Should_Return_All_Audits()
     {
         var dbContext = CreateInMemoryDb();
-        var mockMq = new Mock<RabbitMqClient>("fakehost");
+        var mockMq = new Mock<IRabbitMqClient>();
         var mockCache = new Mock<IRedisClient>();
 
         dbContext.Audits.Add(new Audit { Title = "GDPR", ScheduledDate = DateTime.UtcNow.AddDays(5), AssignedTo = "auditor2@test.com" });
@@ -60,7 +60,7 @@ public class AuditSchedulerTests
     public async Task ScheduleAudit_Should_Cache_Summary()
     {
         var dbContext = CreateInMemoryDb();
-        var mockMq = new Mock<RabbitMqClient>("fakehost");
+        var mockMq = new Mock<IRabbitMqClient>();
         var mockCache = new Mock<IRedisClient>();
         mockCache.Setup(c => c.SetAsync(It.IsAny<string>(), It.IsAny<object>(), null))
                  .Returns(Task.CompletedTask)

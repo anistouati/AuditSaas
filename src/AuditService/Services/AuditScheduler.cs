@@ -1,4 +1,4 @@
-using AuditService.Data;
+    using AuditService.Data;
 using AuditService.Models;
 using Microsoft.EntityFrameworkCore;
 using Shared.Messaging;
@@ -9,10 +9,10 @@ namespace AuditService.Services;
 public class AuditScheduler
 {
     private readonly AppDbContext _context;
-    private readonly RabbitMqClient _mq;
+    private readonly IRabbitMqClient _mq;
     private readonly IRedisClient _cache;
 
-    public AuditScheduler(AppDbContext context, RabbitMqClient mq, IRedisClient cache)
+    public AuditScheduler(AppDbContext context, IRabbitMqClient mq, IRedisClient cache)
     {
         _context = context;
         _mq = mq;

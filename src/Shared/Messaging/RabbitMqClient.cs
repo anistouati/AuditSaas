@@ -4,7 +4,7 @@ using RabbitMQ.Client;
 
 namespace Shared.Messaging;
 
-public class RabbitMqClient : IDisposable
+public class RabbitMqClient : IRabbitMqClient, IDisposable
 {
     private readonly IConnection _connection;
     private readonly IChannel _channel;
