@@ -2,35 +2,124 @@ name: Build and Test
 
 on:
   push:
-    branches: [ "main", "develop" ]
+    branches: [ main, master ]
   pull_request:
-    branches: [ "main", "develop" ]
+    branches: [ main, master ]
 
 jobs:
-  build:
+  build-test:
     runs-on: ubuntu-latest
 
+    services:
+      sqlserver:
+        image: mcr.microsoft.com/mssql/server:2022-latest
+        env:
+          ACCEPT_EULA: Y
+          SA_PASSWORD: interfac1ng!
+        ports:
+          - 1433:1433
+        options: >-
+          --health-cmd "bash -c '/opt/mssql-tools18/bin/sqlcmd -C -No -S localhost -U sa -P interfac1ng! -Q \"SELECT 1\" || exit 1'"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      rabbitmq:
+        image: rabbitmq:3-management
+        ports:
+          - 5672:5672
+          - 15672:15672
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+      redis:
+        image: redis:latest
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping | grep PONG || exit 1"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 15
+
+    env:
+      DOTNET_VERSION: 8.0.x
+      CONNECTIONSTRINGS__DEFAULTCONNECTION: Server=localhost,1433;User ID=sa;Password=interfac1ng!;TrustServerCertificate=True;Encrypt=True;
+      ASPNETCORE_ENVIRONMENT: Development
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v3
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Setup .NET
-        uses: actions/setup-dotnet@v3
+        uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+            dotnet-version: ${{ env.DOTNET_VERSION }}
 
-      - name: Restore dependencies
-        run: dotnet restore
+      - name: Cache NuGet
+        uses: actions/cache@v4
+        with:
+          path: ~/.nuget/packages
+          key: nuget-${{ runner.os }}-${{ hashFiles('**/*.csproj') }}
+          restore-keys: |
+            nuget-${{ runner.os }}-
 
-      - name: Build
-        run: dotnet build --no-restore --configuration Release
+      - name: Restore .NET
+        run: dotnet restore RegulaFlow.AuditSaaS.sln
+
+      - name: Build .NET
+        run: dotnet build RegulaFlow.AuditSaaS.sln --configuration Release --no-restore /warnaserror
 
       - name: Run Unit Tests
-        run: dotnet test tests/UnitTests/UnitTests.csproj --no-build --configuration Release --logger "trx;LogFileName=test_results.trx"
+        run: dotnet test tests/UnitTests/UnitTests.csproj --configuration Release --no-build --logger "trx;LogFileName=unit_tests.trx"
 
-      - name: Upload Test Results
-        if: always()
-        uses: actions/upload-artifact@v3
+      - name: Ensure DB Ready (extra guard)
+        shell: bash
+        run: |
+          for i in {1..30}; do
+            /opt/mssql-tools18/bin/sqlcmd -C -No -S localhost -U sa -P interfac1ng! -Q "SELECT 1" && echo "SQL ready" && exit 0
+            echo "Waiting for SQL..."
+            sleep 2
+          done
+          echo "SQL never became ready" >&2
+          exit 1
+
+      - name: Frontend dependencies cache
+        uses: actions/cache@v4
         with:
-          name: test-results
-          path: '**/test_results.trx'
+          path: |
+            ~/.npm
+            frontend/node_modules
+          key: npm-${{ runner.os }}-${{ hashFiles('frontend/package-lock.json') }}
+          restore-keys: |
+            npm-${{ runner.os }}-
+
+      - name: Build Frontend
+        working-directory: frontend
+        run: |
+          npm ci
+          npm run build
+
+      - name: Launch API (background)
+        run: |
+          dotnet publish src/AuditService/AuditService.csproj -c Release -o out
+          (cd out && dotnet AuditService.dll &) 
+          for i in {1..40}; do
+            if curl -sf http://localhost:5000/swagger/v1/swagger.json >/dev/null 2>&1 || curl -sf http://localhost:5000/api/audit >/dev/null 2>&1; then
+              echo "API ready"
+              exit 0
+            fi
+            echo "Waiting for API..."
+            sleep 2
+          done
+          echo "API failed to become ready" >&2
+          exit 1
+        shell: bash
+
+      - name: Run Integration Tests
+        run: dotnet test tests/IntegrationTests/IntegrationTests.csproj --configuration Release --no-build --logger "trx;LogFileName=integration_tests.trx"
+
+      - name: Summary
+        run: |
+          echo "All tests passed"

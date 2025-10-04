@@ -4,9 +4,9 @@ services:
     image: mcr.microsoft.com/mssql/server:2022-latest
     environment:
       - ACCEPT_EULA=Y
-      - SA_PASSWORD=ch3lSeaFC88*
+      - SA_PASSWORD=interfac1ng!
     ports:
-      - "1434:1434"
+      - "1433:1433"
 
   rabbitmq:
     image: rabbitmq:3-management

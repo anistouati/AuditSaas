@@ -17,15 +17,15 @@ using var scope = host.Services.CreateScope();
 var cache = scope.ServiceProvider.GetRequiredService<IRedisClient>();
 
 var factory = new ConnectionFactory() { HostName = "rabbitmq" };
-using var connection = factory.CreateConnection();
-using var channel = connection.CreateModel();
+using var connection = factory.CreateConnectionAsync().GetAwaiter().GetResult();
+using var channel = connection.CreateChannelAsync().GetAwaiter().GetResult();
 
-channel.ExchangeDeclare(exchange: "audits.exchange", type: ExchangeType.Fanout, durable: true);
-var queueName = channel.QueueDeclare().QueueName;
-channel.QueueBind(queue: queueName, exchange: "audits.exchange", routingKey: "");
+channel.ExchangeDeclareAsync(exchange: "audits.exchange", type: ExchangeType.Fanout, durable: true).GetAwaiter().GetResult();
+var queueName = channel.QueueDeclareAsync().GetAwaiter().GetResult().QueueName;
+channel.QueueBindAsync(queue: queueName, exchange: "audits.exchange", routingKey: "").GetAwaiter().GetResult();
 
-var consumer = new EventingBasicConsumer(channel);
-consumer.Received += async (model, ea) =>
+var consumer = new AsyncEventingBasicConsumer(channel);
+consumer.ReceivedAsync += async (model, ea) =>
 {
     var body = ea.Body.ToArray();
     var message = Encoding.UTF8.GetString(body);
@@ -52,7 +52,7 @@ consumer.Received += async (model, ea) =>
     }
 };
 
-channel.BasicConsume(queue: queueName, autoAck: true, consumer: consumer);
+channel.BasicConsumeAsync(queue: queueName, autoAck: true, consumer: consumer).GetAwaiter().GetResult();
 
 Console.WriteLine("AuditWorker running. Press [enter] to exit.");
 Console.ReadLine();
