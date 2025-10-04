@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using RabbitMQ.Client;
+using Microsoft.Extensions.Configuration;
 
 namespace Shared.Messaging;
 
@@ -9,10 +10,16 @@ public class RabbitMqClient : IRabbitMqClient, IDisposable
     private readonly IConnection _connection;
     private readonly IChannel _channel;
     private const string ExchangeName = "audits.exchange";
+    private readonly string _host;
 
-    public RabbitMqClient(string hostName = "rabbitmq")
+    public RabbitMqClient(IConfiguration? configuration = null, string? hostName = null)
     {
-        var factory = new ConnectionFactory { HostName = hostName };
+        _host = hostName
+                 ?? configuration?["Messaging:RabbitMq:Host"]
+                 ?? Environment.GetEnvironmentVariable("RABBITMQ_HOST")
+                 ?? "rabbitmq";
+
+        var factory = new ConnectionFactory { HostName = _host };
         _connection = factory.CreateConnectionAsync().GetAwaiter().GetResult();
         _channel = _connection.CreateChannelAsync().GetAwaiter().GetResult();
         _channel.ExchangeDeclareAsync(exchange: ExchangeName, type: ExchangeType.Fanout, durable: true);
