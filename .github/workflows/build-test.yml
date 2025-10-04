@@ -18,11 +18,6 @@ jobs:
           SA_PASSWORD: Interfac1ng!2024
         ports:
           - 1433:1433
-        options: >-
-          --health-cmd "bash -c '/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P \"$SA_PASSWORD\" -Q \"SELECT 1\" >/dev/null 2>&1 || exit 1'"
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 10
       rabbitmq:
         image: rabbitmq:3-management
         ports:

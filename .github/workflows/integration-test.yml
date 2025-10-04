@@ -14,9 +14,6 @@ jobs:
           SA_PASSWORD: Interfac1ng!2024
         ports:
           - 1433:1433
-        options: >-
-          --health-cmd "bash -c '/opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P \"$SA_PASSWORD\" -Q \"SELECT 1\" >/dev/null 2>&1 || exit 1'" \
-          --health-interval 10s --health-timeout 5s --health-retries 15 --health-start-period 20s
       rabbitmq:
         image: rabbitmq:3-management
         ports:
@@ -47,14 +44,13 @@ jobs:
             9.0.x
             8.0.x
 
-
-      - name: Wait for SQL (health & retry)
+      - name: Wait for SQL (port probe)
         shell: bash
         run: |
           echo "Waiting for SQL Server to become healthy..."
           for i in {1..60}; do
-            if /opt/mssql-tools/bin/sqlcmd -S localhost -U sa -P "$SA_PASSWORD" -Q "SELECT 1" >/dev/null 2>&1; then
-              echo "SQL up on attempt $i"; break;
+            if (echo > /dev/tcp/localhost/1433) >/dev/null 2>&1; then
+              echo "Port 1433 open (attempt $i)"; break;
             fi
             sleep 2
             if [ "$i" -eq 60 ]; then echo "SQL did not become ready"; exit 1; fi
