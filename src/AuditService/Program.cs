@@ -24,7 +24,7 @@ builder.Services.AddDbContext<AppDbContext>(options =>
 builder.Services.AddAppTelemetry("AuditService");
 
 // Messaging & Cache
-builder.Services.AddSingleton<RabbitMqClient>();
+builder.Services.AddSingleton<IRabbitMqClient, RabbitMqClient>();
 builder.Services.AddSingleton<IRedisClient, RedisClient>();
 
 // Business
