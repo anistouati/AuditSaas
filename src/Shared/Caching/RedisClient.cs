@@ -43,25 +43,38 @@ public class RedisClient : IRedisClient, IDisposable
         var sequence = new List<string> { hostFromBase };
         sequence.AddRange(HostFallbackOrder.Where(h => h != hostFromBase));
 
+        int perHostAttempts = ParseIntEnv("REDIS_CONNECT_ATTEMPTS", 5, 1, 20);
+        int baseDelayMs = ParseIntEnv("REDIS_CONNECT_DELAY_MS", 300, 50, 5000);
+
         foreach (var host in sequence.Distinct())
         {
-            var hostConn = System.Text.RegularExpressions.Regex.Replace(baseConn, "^[^,]+", _ => host + ":6379");
-            attempted.Add(hostConn);
-            try
+            for (int attempt = 1; attempt <= perHostAttempts; attempt++)
             {
-                Console.WriteLine($"[RedisClient] Attempting connection: {hostConn}");
-                mux = ConnectionMultiplexer.Connect(hostConn);
-                if (host != hostFromBase)
-                    Console.WriteLine($"[RedisClient] Fallback host succeeded: {host}");
-                last = null;
-                break;
-            }
-            catch (Exception ex)
-            {
-                last = ex;
-                Console.Error.WriteLine($"[RedisClient] Connection attempt failed: {hostConn} -> {ex.Message}");
+                var hostConn = System.Text.RegularExpressions.Regex.Replace(baseConn, "^[^,]+", _ => host + ":6379");
+                attempted.Add(hostConn + $"#try{attempt}");
+                try
+                {
+                    Console.WriteLine($"[RedisClient] Attempting connection: {hostConn} (attempt {attempt}/{perHostAttempts})");
+                    mux = ConnectionMultiplexer.Connect(hostConn);
+                    if (host != hostFromBase)
+                        Console.WriteLine($"[RedisClient] Fallback host succeeded: {host}");
+                    last = null;
+                    goto Connected;
+                }
+                catch (Exception ex)
+                {
+                    last = ex;
+                    Console.Error.WriteLine($"[RedisClient] Connection failed: {hostConn} (attempt {attempt}) -> {ex.Message}");
+                    if (attempt < perHostAttempts)
+                    {
+                        int delay = baseDelayMs * attempt;
+                        Thread.Sleep(delay);
+                    }
+                }
             }
         }
+
+    Connected:
 
         if (mux == null)
         {
@@ -71,6 +84,17 @@ public class RedisClient : IRedisClient, IDisposable
 
         _redis = mux;
         _db = _redis.GetDatabase();
+    }
+
+    private static int ParseIntEnv(string name, int fallback, int min, int max)
+    {
+        var raw = Environment.GetEnvironmentVariable(name);
+        if (string.IsNullOrWhiteSpace(raw)) return fallback;
+        if (int.TryParse(raw, out var val))
+        {
+            return Math.Clamp(val, min, max);
+        }
+        return fallback;
     }
 
     public async Task SetAsync<T>(string key, T value, TimeSpan? expiry = null)
