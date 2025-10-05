@@ -63,6 +63,23 @@ jobs:
       - name: Build
         run: dotnet build RegulaFlow.AuditSaaS.sln --no-restore --configuration Release
 
+      - name: Enable memory overcommit (Redis recommendation)
+        shell: bash
+        run: |
+          sudo sysctl -w vm.overcommit_memory=1
+          sysctl vm.overcommit_memory
+
+      - name: Wait for Redis
+        shell: bash
+        run: |
+          for i in {1..40}; do
+            if (echo > /dev/tcp/localhost/6379) >/dev/null 2>&1; then
+              echo "Redis TCP port open (attempt $i)"; break;
+            fi
+            sleep 2
+            if [ "$i" -eq 40 ]; then echo "Redis not reachable" >&2; exit 1; fi
+          done
+
       - name: Launch API (background)
         shell: bash
         run: |
